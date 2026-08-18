@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import { PHOTOBOOTH_PROMPT } from './prompts'
+import { DEFAULT_PROMPT_PRESET, PROMPT_PRESETS } from './prompts'
 
 const HAND_STABLE_FRAMES = 4
 const COUNTDOWN_SECONDS = 3
@@ -57,6 +57,9 @@ function App() {
   const [pollAttempt, setPollAttempt] = useState(0)
   const [generationSeconds, setGenerationSeconds] = useState(0)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [promptPanelOpen, setPromptPanelOpen] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(DEFAULT_PROMPT_PRESET.id)
+  const [activePrompt, setActivePrompt] = useState<string>(DEFAULT_PROMPT_PRESET.prompt)
   const [mode, setMode] = useState<'desktop' | 'mobile'>(
     window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'desktop',
   )
@@ -65,6 +68,7 @@ function App() {
   const appReady = ready && handsReady
   const previewUrl = generatedUrl || snapshotUrl
   const generating = submitStatus === 'submitting' || submitStatus === 'polling'
+  const selectedPreset = PROMPT_PRESETS.find((preset) => preset.id === selectedPresetId) || DEFAULT_PROMPT_PRESET
 
   useEffect(() => {
     if (!generating) return
@@ -356,7 +360,7 @@ function App() {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: PHOTOBOOTH_PROMPT,
+          prompt: activePrompt,
           aspectRatio: mode === 'mobile' ? '9:16' : '16:9',
           referenceImages: [
             {
@@ -460,6 +464,7 @@ function App() {
     setSubmitError('')
     setPollAttempt(0)
     setGenerationSeconds(0)
+    setPromptPanelOpen(false)
     generationTokenRef.current += 1
     peaceFramesRef.current = 0
     peaceLatchedRef.current = false
@@ -487,6 +492,18 @@ function App() {
     link.download = `${generatedUrl ? 'ai-photo' : 'snapshot'}-${Date.now()}.${extension}`
     link.click()
     URL.revokeObjectURL(objectUrl)
+  }
+
+  function selectPromptPreset(id: string) {
+    const preset = PROMPT_PRESETS.find((entry) => entry.id === id)
+    if (!preset) return
+
+    setSelectedPresetId(preset.id)
+    setActivePrompt(preset.prompt)
+  }
+
+  function resetPrompt() {
+    setActivePrompt(selectedPreset.prompt)
   }
 
   return (
@@ -537,6 +554,15 @@ function App() {
                 </span>
                 <button
                   type="button"
+                  className="snapshot-action prompt-action"
+                  aria-label="Prompt ပြင်ရန်"
+                  disabled={generating}
+                  onClick={() => setPromptPanelOpen(true)}
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
                   className="snapshot-action"
                   aria-label="ပုံဒေါင်းရန်"
                   disabled={generating}
@@ -578,6 +604,34 @@ function App() {
                   </div>
                 ) : null}
               </div>
+              {promptPanelOpen ? (
+                <div className="prompt-panel" role="dialog" aria-modal="true" aria-label="Prompt editor">
+                  <div className="prompt-panel-header">
+                    <strong>Prompt</strong>
+                    <button type="button" className="prompt-panel-close" aria-label="Close prompt editor" onClick={() => setPromptPanelOpen(false)}>
+                      ×
+                    </button>
+                  </div>
+                  <label className="prompt-field">
+                    <span>Preset</span>
+                    <select value={selectedPresetId} onChange={(event) => selectPromptPreset(event.target.value)}>
+                      {PROMPT_PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="prompt-field">
+                    <span>Prompt</span>
+                    <textarea value={activePrompt} onChange={(event) => setActivePrompt(event.target.value)} />
+                  </label>
+                  <div className="prompt-panel-actions">
+                    <button type="button" onClick={resetPrompt}>Reset</button>
+                    <button type="button" onClick={() => setPromptPanelOpen(false)}>Done</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
