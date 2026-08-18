@@ -198,11 +198,85 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
-.snapshot-modal img {
-  max-width: min(92vw, 920px);
-  max-height: 88vh;
+.snapshot-action:disabled {
+  cursor: default;
+  opacity: 0.58;
+  box-shadow: none;
+}
+
+.generate-action {
+  font-size: 17px;
+}
+
+.preview-image-shell {
+  position: relative;
+  overflow: hidden;
   border-radius: 22px;
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.48);
+}
+
+.preview-image-shell img {
+  display: block;
+  max-width: min(92vw, 920px);
+  max-height: 88vh;
+  transition:
+    filter 260ms ease,
+    transform 260ms ease;
+}
+
+.preview-image-shell.generating img {
+  filter: blur(3px) brightness(0.7) saturate(0.92);
+  transform: scale(1.01);
+}
+
+.generation-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(255, 215, 130, 0.18), transparent 34%),
+    rgba(4, 6, 12, 0.22);
+  color: rgba(255, 255, 255, 0.94);
+  text-align: center;
+}
+
+.generation-overlay::before {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background: linear-gradient(115deg, transparent 36%, rgba(255, 231, 178, 0.24) 48%, transparent 60%);
+  animation: generation-sweep 1600ms ease-in-out infinite;
+}
+
+.generation-overlay strong,
+.generation-overlay span,
+.generation-ring {
+  position: relative;
+  z-index: 1;
+}
+
+.generation-overlay strong {
+  font-size: 16px;
+}
+
+.generation-overlay span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+}
+
+.generation-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 219, 132, 0.96);
+  border-right-color: rgba(255, 255, 255, 0.72);
+  animation: loading-spin 900ms linear infinite;
 }
 
 .hidden-canvas {
@@ -239,6 +313,16 @@
 
   100% {
     background-position: -120% 0;
+  }
+}
+
+@keyframes generation-sweep {
+  0% {
+    transform: translateX(-34%);
+  }
+
+  100% {
+    transform: translateX(34%);
   }
 }
 

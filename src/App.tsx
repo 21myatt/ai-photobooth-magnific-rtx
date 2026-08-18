@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { PHOTOBOOTH_PROMPT } from './prompts'
 
 const HAND_STABLE_FRAMES = 4
 const COUNTDOWN_SECONDS = 3
 const MEDIAPIPE_HANDS_VERSION = '0.4.1675469240'
+const POLL_INTERVAL_MS = 5000
+const MAX_POLL_ATTEMPTS = 60
+const SUBMIT_IMAGE_MAX_SIDE = 1280
+const FAILED_STATUSES = new Set(['FAILED', 'ERROR', 'CANCELLED', 'TIMED_OUT'])
+
+type SubmitStatus = 'idle' | 'submitting' | 'polling' | 'ready' | 'error'
 
 function isFingerExtended(
   landmarks: Array<{ x: number; y: number }>,
@@ -35,20 +42,41 @@ function App() {
   const countdownActiveRef = useRef(false)
   const countdownEndRef = useRef(0)
   const processingRef = useRef(false)
+  const generationTokenRef = useRef(0)
 
   const [ready, setReady] = useState(false)
   const [handsReady, setHandsReady] = useState(false)
   const [status, setStatus] = useState('idle')
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(true)
   const [countdownUntil, setCountdownUntil] = useState(0)
   const [countdownLabel, setCountdownLabel] = useState('')
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
+  const [submitError, setSubmitError] = useState('')
+  const [pollAttempt, setPollAttempt] = useState(0)
+  const [generationSeconds, setGenerationSeconds] = useState(0)
+  const [taskId, setTaskId] = useState<string | null>(null)
   const [mode, setMode] = useState<'desktop' | 'mobile'>(
     window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'desktop',
   )
 
   const aspect = useMemo(() => '16 / 9', [])
   const appReady = ready && handsReady
+  const previewUrl = generatedUrl || snapshotUrl
+  const generating = submitStatus === 'submitting' || submitStatus === 'polling'
+
+  useEffect(() => {
+    if (!generating) return
+
+    const startedAt = Date.now()
+    setGenerationSeconds(0)
+    const timer = window.setInterval(() => {
+      setGenerationSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [generating])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 768px)')
@@ -65,12 +93,12 @@ function App() {
         const remaining = Math.ceil((countdownUntil - now) / 1000)
         setCountdownLabel(String(Math.max(1, remaining)))
         setStatus('ငြိမ်ငြိမ်နေပါ')
-      } else if (appReady) {
+      } else if (appReady && !snapshotUrl) {
         setStatus('ဓာတ်ပုံရိုက်ရန် လက်နှစ်ချောင်းထောင်ပါ')
       }
     }, 250)
     return () => window.clearInterval(timer)
-  }, [appReady, countdownUntil])
+  }, [appReady, countdownUntil, snapshotUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -302,13 +330,137 @@ function App() {
     context.drawImage(video, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
     const url = canvas.toDataURL('image/jpeg', 0.92)
     setSnapshotUrl(url)
+    setGeneratedUrl(null)
+    setTaskId(null)
+    setSubmitStatus('idle')
+    setSubmitError('')
+    setPollAttempt(0)
+    setGenerationSeconds(0)
     setStatus('snapshot taken')
+    // void submitSnapshot(url)
     setPreviewOpen(true)
+  }
+
+  async function submitSnapshot(url: string) {
+    try {
+      setSubmitStatus('submitting')
+      setSubmitError('')
+      setPollAttempt(0)
+      setGenerationSeconds(0)
+      setStatus('sending to magnific')
+      const submissionUrl = await createSubmissionImage(url)
+
+      const response = await fetch('/api/submit', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: PHOTOBOOTH_PROMPT,
+          aspectRatio: mode === 'mobile' ? '9:16' : '16:9',
+          referenceImages: [
+            {
+              image: submissionUrl,
+              text: 'img1',
+              mime_type: 'image/jpeg',
+            },
+          ],
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error?.error || `Submit failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      if (!data?.taskId) {
+        throw new Error('Missing task id')
+      }
+
+      setTaskId(data.taskId)
+      setSubmitStatus('polling')
+      setStatus('generating photo')
+      await pollResult(data.taskId, generationTokenRef.current)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setSubmitStatus('error')
+      setSubmitError(message)
+      setStatus('generation failed')
+    }
+  }
+
+  async function createSubmissionImage(url: string) {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Could not prepare image'))
+      img.src = url
+    })
+
+    const scale = Math.min(1, SUBMIT_IMAGE_MAX_SIDE / Math.max(image.naturalWidth, image.naturalHeight))
+    const width = Math.max(1, Math.round(image.naturalWidth * scale))
+    const height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('Could not prepare image')
+    }
+    context.drawImage(image, 0, 0, width, height)
+    return canvas.toDataURL('image/jpeg', 0.86)
+  }
+
+  async function pollResult(nextTaskId: string, token: number) {
+    for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS))
+      if (token !== generationTokenRef.current) return
+      setPollAttempt(attempt)
+
+      const response = await fetch(`/api/status?taskId=${encodeURIComponent(nextTaskId)}`)
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error?.error || `Status failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      if (token !== generationTokenRef.current) return
+
+      if (data.status === 'COMPLETED' && data.imageUrl) {
+        setGeneratedUrl(data.imageUrl)
+        setSubmitStatus('ready')
+        setStatus('AI photo ready')
+        return
+      }
+
+      if (FAILED_STATUSES.has(data.status)) {
+        const detail = data.error || data.result?.data?.error || data.result?.error || data.status
+        throw new Error(`Generation failed: ${detail}`)
+      }
+
+      setStatus('generating photo')
+    }
+
+    throw new Error('Generation timed out')
+  }
+
+  function generatePhoto() {
+    if (!snapshotUrl || generating) return
+    generationTokenRef.current += 1
+    void submitSnapshot(snapshotUrl)
   }
 
   function resetSession() {
     setPreviewOpen(false)
     setSnapshotUrl(null)
+    setGeneratedUrl(null)
+    setTaskId(null)
+    setSubmitStatus('idle')
+    setSubmitError('')
+    setPollAttempt(0)
+    setGenerationSeconds(0)
+    generationTokenRef.current += 1
     peaceFramesRef.current = 0
     peaceLatchedRef.current = false
     peaceTriggeredRef.current = false
@@ -316,6 +468,25 @@ function App() {
     countdownActiveRef.current = false
     setCountdownLabel('')
     setCountdownUntil(0)
+  }
+
+  async function downloadPreview() {
+    if (!previewUrl) return
+
+    const extension = generatedUrl ? 'png' : 'jpg'
+    const response = await fetch(previewUrl)
+    if (!response.ok) {
+      setSubmitError(`Download failed: ${response.status}`)
+      return
+    }
+
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `${generatedUrl ? 'ai-photo' : 'snapshot'}-${Date.now()}.${extension}`
+    link.click()
+    URL.revokeObjectURL(objectUrl)
   }
 
   return (
@@ -349,34 +520,64 @@ function App() {
           ) : null}
         </div>
 
-        {snapshotUrl && previewOpen ? (
-          <div className="snapshot-modal" aria-live="polite" onClick={resetSession}>
-            <div className="snapshot-frame" onClick={(event) => event.stopPropagation()}>
+        {previewUrl && previewOpen ? (
+          <div className="snapshot-modal" aria-live="polite" onClick={generating ? undefined : resetSession}>
+            <div className="snapshot-frame" data-task-id={taskId || undefined} onClick={(event) => event.stopPropagation()}>
               <div className="snapshot-actions">
-                <span className="reset-hint">နောက်တစ်ပုံရိုက်ရန် ပိတ်ပါ</span>
+                <span className="reset-hint">
+                  {submitStatus === 'submitting'
+                    ? 'AI ပုံစတင်နေသည်'
+                    : submitStatus === 'polling'
+                      ? 'AI ပုံဖန်တီးနေသည်'
+                      : submitStatus === 'ready'
+                        ? 'AI ပုံရပြီ'
+                      : submitStatus === 'error'
+                        ? submitError || 'AI ပုံမရပါ၊ ထပ်လုပ်ပါ'
+                        : 'နောက်တစ်ပုံရိုက်ရန် ပိတ်ပါ'}
+                </span>
                 <button
                   type="button"
                   className="snapshot-action"
                   aria-label="ပုံဒေါင်းရန်"
-                  onClick={() => {
-                    const link = document.createElement('a')
-                    link.href = snapshotUrl
-                    link.download = `snapshot-${Date.now()}.jpg`
-                    link.click()
-                  }}
+                  disabled={generating}
+                  onClick={() => void downloadPreview()}
                 >
                   ⬇
                 </button>
                 <button
                   type="button"
+                  className="snapshot-action generate-action"
+                  aria-label="AI ပုံဖန်တီးရန်"
+                  disabled={generating || !snapshotUrl}
+                  onClick={generatePhoto}
+                >
+                  {generating ? '…' : '✨'}
+                </button>
+                <button
+                  type="button"
                   className="snapshot-action"
                   aria-label="ပိတ်ရန်"
+                  disabled={generating}
                   onClick={resetSession}
                 >
                   ×
                 </button>
               </div>
-              <img src={snapshotUrl} alt="snapshot" />
+              <div className={`preview-image-shell ${generating ? 'generating' : ''}`}>
+                <img src={previewUrl} alt={generatedUrl ? 'generated AI result' : 'snapshot'} />
+                {generating ? (
+                  <div className="generation-overlay" aria-live="polite">
+                    <div className="generation-ring" />
+                    <strong>Generating AI photo</strong>
+                    <span>
+                      {pollAttempt > 0
+                        ? `Checking result ${pollAttempt} of ${MAX_POLL_ATTEMPTS}`
+                        : 'Preparing your photo'}
+                    </span>
+                    <span>{`Working for ${generationSeconds} sec`}</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : null}

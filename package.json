@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-local.mjs",
+    "dev:vite": "vite",
+    "dev:vercel": "npx vercel dev",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
