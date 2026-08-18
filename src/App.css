@@ -1,0 +1,264 @@
+.app {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(155, 188, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, #060912, #0b1020);
+}
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.camera-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #050814;
+}
+
+.camera-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #050814;
+  opacity: 0;
+  filter: blur(18px);
+  transform: scale(1.04);
+  transition:
+    opacity 360ms ease,
+    filter 360ms ease,
+    transform 360ms ease;
+}
+
+.camera-feed.ready {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+
+.loading-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  padding: 24px;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    radial-gradient(circle at 50% 35%, rgba(110, 231, 183, 0.18), transparent 24%),
+    rgba(5, 8, 20, 0.74);
+  backdrop-filter: blur(22px);
+}
+
+.loading-orbit {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-top-color: rgba(110, 231, 183, 0.95);
+  border-right-color: rgba(255, 255, 255, 0.6);
+  animation: loading-spin 1200ms linear infinite;
+}
+
+.loading-copy {
+  max-width: 340px;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: center;
+  font-size: 15px;
+}
+
+.loading-bars {
+  display: grid;
+  width: min(320px, 70vw);
+  gap: 8px;
+}
+
+.loading-bars span {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
+  background-size: 220% 100%;
+  animation: loading-shimmer 1300ms ease-in-out infinite;
+}
+
+.loading-bars span:nth-child(2) {
+  width: 84%;
+  animation-delay: 120ms;
+}
+
+.loading-bars span:nth-child(3) {
+  width: 62%;
+  animation-delay: 240ms;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px;
+  pointer-events: none;
+}
+
+.hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.55);
+  backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+}
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: clamp(96px, 18vw, 220px);
+  font-weight: 800;
+  text-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  animation: countdown-pop 800ms ease-out both;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.dot.on {
+  background: #6ee7b7;
+  box-shadow: 0 0 0 4px rgba(110, 231, 183, 0.16);
+}
+
+.capture {
+  pointer-events: auto;
+  align-self: flex-end;
+  margin-top: auto;
+  border: 0;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #09111f;
+  font-weight: 700;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.snapshot-modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 6, 12, 0.56);
+  padding: 20px;
+}
+
+.snapshot-frame {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  justify-items: end;
+}
+
+.snapshot-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reset-hint {
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.snapshot-action {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #09111f;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.snapshot-modal img {
+  max-width: min(92vw, 920px);
+  max-height: 88vh;
+  border-radius: 22px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.48);
+}
+
+.hidden-canvas {
+  display: none;
+}
+
+@keyframes countdown-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  18% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 12px;
+  }
+
+  .capture {
+    width: 66px;
+    height: 66px;
+  }
+
+  .snapshot-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .reset-hint {
+    flex: 1;
+    min-width: 0;
+  }
+}
