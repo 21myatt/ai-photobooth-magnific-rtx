@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import "./App.css";
 import { DEFAULT_PROMPT_PRESET, PROMPT_PRESETS } from "./prompts";
 
@@ -50,6 +50,7 @@ function App() {
   const [handsReady, setHandsReady] = useState(false);
   const [status, setStatus] = useState("idle");
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+  const [sourceMode, setSourceMode] = useState<"camera" | "upload" | null>(null);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(true);
   const [countdownUntil, setCountdownUntil] = useState(0);
@@ -75,6 +76,7 @@ function App() {
   const [passcodeCooldownLabel, setPasscodeCooldownLabel] = useState("");
   const [passcodeCooldownLevel, setPasscodeCooldownLevel] = useState(0);
   const [snapshotConsumed, setSnapshotConsumed] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [mode, setMode] = useState<"desktop" | "mobile">(
     window.matchMedia("(max-width: 768px)").matches ? "mobile" : "desktop",
   );
@@ -92,6 +94,7 @@ function App() {
     : "";
   const passcodeLocked = passcodeLockoutUntil > Date.now();
   const hideEditAndGenerate = generating || Boolean(generatedUrl) || snapshotConsumed;
+  const uploadActive = sourceMode === "upload" && Boolean(snapshotUrl);
 
   useEffect(() => {
     if (!generating) return;
@@ -126,6 +129,14 @@ function App() {
     }, 250);
     return () => window.clearInterval(timer);
   }, [appReady, countdownUntil, snapshotUrl]);
+
+  useEffect(() => {
+    if (sourceMode !== "upload" || !snapshotUrl) return;
+    peaceFramesRef.current = 0;
+    peaceLatchedRef.current = true;
+    peaceTriggeredRef.current = true;
+    awaitingReleaseRef.current = true;
+  }, [snapshotUrl, sourceMode]);
 
   useEffect(() => {
     if (!passcodeOpen) return;
@@ -272,6 +283,10 @@ function App() {
         setStatus("ဓာတ်ပုံရိုက်ရန် လက်နှစ်ချောင်းထောင်ပါ");
 
         hands.onResults((results: any) => {
+          if (uploadActive) {
+            return;
+          }
+
           const landmarks = results.multiHandLandmarks?.[0];
           if (!landmarks) {
             peaceFramesRef.current = 0;
@@ -356,7 +371,7 @@ function App() {
       handsRef.current = null;
     };
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, snapshotUrl, sourceMode]);
 
   function startCaptureCountdown() {
     const tick = () => {
@@ -416,6 +431,7 @@ function App() {
     context.drawImage(video, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
     const url = canvas.toDataURL("image/jpeg", 0.92);
     setSnapshotUrl(url);
+    setSourceMode("camera");
     setGeneratedUrl(null);
     setTaskId(null);
     setSubmitStatus("idle");
@@ -424,6 +440,7 @@ function App() {
     setGenerationSeconds(0);
     setGenerationUnlocked(false);
     setSnapshotConsumed(false);
+    setSourceMode("camera");
     setPasscodeAttempts(0);
     setPasscodeLockoutUntil(0);
     setPasscodeCooldownLabel("");
@@ -564,9 +581,63 @@ function App() {
     void submitSnapshot(snapshotUrl);
   }
 
+  async function handleUploadChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setSubmitError("Please upload an image file");
+      return;
+    }
+
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const next = new Image();
+        next.onload = () => resolve(next);
+        next.onerror = () => reject(new Error("Could not load image"));
+        next.src = objectUrl;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not prepare image");
+      context.drawImage(img, 0, 0);
+      URL.revokeObjectURL(objectUrl);
+
+      setSnapshotUrl(canvas.toDataURL("image/jpeg", 0.92));
+      setSourceMode("upload");
+      setGeneratedUrl(null);
+      setTaskId(null);
+      setSubmitStatus("idle");
+      setSubmitError("");
+      setPollAttempt(0);
+      setGenerationSeconds(0);
+      setGenerationUnlocked(false);
+      setSnapshotConsumed(false);
+      setPasscodeOpen(false);
+      setPasscodeValue("");
+      setPasscodeError("");
+      setPasscodeAttempts(0);
+      setPasscodeLockoutUntil(0);
+      setPasscodeCooldownLabel("");
+      setPasscodeCooldownLevel(0);
+      setPreviewOpen(true);
+      setStatus("upload ready");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Could not load image",
+      );
+    }
+  }
+
   function resetSession() {
     setPreviewOpen(false);
     setSnapshotUrl(null);
+    setSourceMode(null);
     setGeneratedUrl(null);
     setTaskId(null);
     setSubmitStatus("idle");
@@ -707,6 +778,15 @@ function App() {
               <span className={`dot ${appReady ? "on" : ""}`} />
               <span>{status}</span>
             </div>
+            <button
+              type="button"
+              className="upload-action"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={!appReady || generating}
+            >
+              <span className="upload-icon">↑</span>
+              <span>Upload Photo</span>
+            </button>
           </div>
           {countdownLabel ? (
             <div
@@ -782,7 +862,7 @@ function App() {
                 </button>
               </div>
               <div
-                className={`preview-image-shell ${generating ? "generating" : ""}`}
+                className={`preview-image-shell ${generating ? "generating" : ""} ${sourceMode === "upload" ? "contain" : ""}`}
               >
                 <img
                   src={previewUrl}
@@ -933,6 +1013,13 @@ function App() {
         ) : null}
       </div>
 
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={handleUploadChange}
+      />
       <canvas ref={canvasRef} className="hidden-canvas" />
     </main>
   );
