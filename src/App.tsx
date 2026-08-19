@@ -74,6 +74,7 @@ function App() {
   const [passcodeLockoutUntil, setPasscodeLockoutUntil] = useState(0);
   const [passcodeCooldownLabel, setPasscodeCooldownLabel] = useState("");
   const [passcodeCooldownLevel, setPasscodeCooldownLevel] = useState(0);
+  const [snapshotConsumed, setSnapshotConsumed] = useState(false);
   const [mode, setMode] = useState<"desktop" | "mobile">(
     window.matchMedia("(max-width: 768px)").matches ? "mobile" : "desktop",
   );
@@ -90,6 +91,7 @@ function App() {
     ? String(import.meta.env.VITE_PASSCODE)
     : "";
   const passcodeLocked = passcodeLockoutUntil > Date.now();
+  const hideEditAndGenerate = generating || Boolean(generatedUrl) || snapshotConsumed;
 
   useEffect(() => {
     if (!generating) return;
@@ -421,6 +423,7 @@ function App() {
     setPollAttempt(0);
     setGenerationSeconds(0);
     setGenerationUnlocked(false);
+    setSnapshotConsumed(false);
     setPasscodeAttempts(0);
     setPasscodeLockoutUntil(0);
     setPasscodeCooldownLabel("");
@@ -546,7 +549,7 @@ function App() {
   }
 
   function generatePhoto() {
-    if (!snapshotUrl || generating) return;
+    if (!snapshotUrl || generating || snapshotConsumed) return;
 
     if (!generationUnlocked) {
       setPasscodeOpen(true);
@@ -556,6 +559,8 @@ function App() {
     }
 
     generationTokenRef.current += 1;
+    setSnapshotConsumed(true);
+    setGenerationUnlocked(false);
     void submitSnapshot(snapshotUrl);
   }
 
@@ -577,6 +582,7 @@ function App() {
     setPasscodeLockoutUntil(0);
     setPasscodeCooldownLabel("");
     setPasscodeCooldownLevel(0);
+    setSnapshotConsumed(false);
     generationTokenRef.current += 1;
     peaceFramesRef.current = 0;
     peaceLatchedRef.current = false;
@@ -741,6 +747,7 @@ function App() {
                   className="snapshot-action prompt-action"
                   aria-label="Prompt ပြင်ရန်"
                   disabled={generating}
+                  style={{ display: hideEditAndGenerate ? "none" : undefined }}
                   onClick={() => setPromptPanelOpen(true)}
                 >
                   ✎
@@ -759,6 +766,7 @@ function App() {
                   className="snapshot-action generate-action"
                   aria-label="AI ပုံဖန်တီးရန်"
                   disabled={generating || !snapshotUrl}
+                  style={{ display: hideEditAndGenerate ? "none" : undefined }}
                   onClick={generatePhoto}
                 >
                   {generating ? "…" : "✨"}
