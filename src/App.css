@@ -368,6 +368,104 @@
   padding: 0 14px;
 }
 
+.passcode-panel {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 5;
+  display: grid;
+  width: min(420px, 92vw);
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(7, 10, 18, 0.94);
+  box-shadow: 0 28px 110px rgba(0, 0, 0, 0.64);
+  backdrop-filter: blur(18px);
+  transform: translate(-50%, -50%);
+}
+
+.passcode-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.passcode-panel-header strong {
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 16px;
+}
+
+.passcode-help {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 13px;
+}
+
+.passcode-field {
+  display: grid;
+  gap: 7px;
+}
+
+.passcode-field span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.passcode-field input {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.94);
+  outline: none;
+}
+
+.passcode-field input:focus {
+  border-color: rgba(110, 231, 183, 0.7);
+  box-shadow: 0 0 0 3px rgba(110, 231, 183, 0.14);
+}
+
+.passcode-field input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.passcode-cooldown {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(110, 231, 183, 0.08);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+}
+
+.passcode-error {
+  color: #ffb4b4;
+  font-size: 13px;
+}
+
+.passcode-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.passcode-panel-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #09111f;
+}
+
+.passcode-panel-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .hidden-canvas {
   display: none;
 }
@@ -438,6 +536,10 @@
   .prompt-panel {
     top: 56px;
     right: 0;
+  }
+
+  .passcode-panel {
+    width: min(360px, 92vw);
   }
 
   .prompt-field textarea {
